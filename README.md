@@ -1,4 +1,4 @@
-# ArgonModule
+# ArgonModules
 
 Argon modules for A Dance of Fire and Ice.
 
