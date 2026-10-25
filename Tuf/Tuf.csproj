@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- TUF (tuforums.com) level browser, ported from Quartz's TUF module to an Argon module. -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>warnings</Nullable>
+        <NoWarn>MSB3277;CS8632;CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>
+        <RootNamespace>Quartz.Features.Tuf</RootNamespace>
+        <AssemblyName>Tuf</AssemblyName>
+        <TargetExt>.armodule</TargetExt>
+        <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+        <ADOFAI_PATH Condition="'$(ADOFAI_PATH)' == ''">/Volumes/iiiiiiiiiiiiiiiiiiii/SteamLibrary/steamapps/common/A Dance of Fire and Ice</ADOFAI_PATH>
+        <Managed>$(ADOFAI_PATH)/ADanceOfFireAndIce.app/Contents/Resources/Data/Managed</Managed>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="$(ADOFAI_PATH)/UserData/Argon/Core/ArgonCore.dll" Private="false" />
+        <Reference Include="$(ADOFAI_PATH)/MelonLoader/net35/MelonLoader.dll" Private="false" />
+        <Reference Include="$(ADOFAI_PATH)/MelonLoader/net35/0Harmony.dll" Private="false" />
+        <Reference Include="$(Managed)/Assembly-CSharp.dll" Private="false" />
+        <Reference Include="$(Managed)/Assembly-CSharp-firstpass.dll" Private="false" />
+        <Reference Include="$(Managed)/RDTools.dll" Private="false" />
+        <Reference Include="$(Managed)/Newtonsoft.Json.dll" Private="false" />
+        <Reference Include="$(Managed)/Unity.TextMeshPro.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.CoreModule.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.UI.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.UIModule.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.ImageConversionModule.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.UnityWebRequestModule.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.InputLegacyModule.dll" Private="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="TufLogo.png" />
+        <EmbeddedResource Include="Lang/*.json" />
+    </ItemGroup>
+
+    <Target Name="CopyToArgonModules" AfterTargets="Build">
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ADOFAI_PATH)/UserData/Argon/Modules" Condition="'$(NoDeploy)' != 'true'" />
+    </Target>
+</Project>

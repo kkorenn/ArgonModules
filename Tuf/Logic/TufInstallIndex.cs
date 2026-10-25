@@ -1,0 +1,201 @@
+#nullable enable
+using Newtonsoft.Json.Linq;
+using Quartz.IO.Interface;
+using Quartz.Core;
+namespace Quartz.Features.Tuf;
+public sealed class TufInstallEntry {
+    public int Id;
+    public string Song = "";
+    public string Artist = "";
+    public string Creator = "";
+    public string Difficulty = "";
+    public string DifficultyColor = "#FFFFFF";
+    public int Clears;
+    public int Likes;
+    public string Folder = "";
+    public string DownloadUrl = "";
+    public string VideoLink = "";
+    public string FileId = "";
+    public long SizeBytes;
+    public long InstalledAtUtc;
+    public bool NeedsInfo => string.IsNullOrEmpty(Song) || string.IsNullOrEmpty(Difficulty);
+    public bool ApplyChart(TufChartInfo? info) {
+        if(info == null) return false;
+        bool changed = false;
+        if(string.IsNullOrEmpty(Song) && info.Song.Length > 0) {
+            Song = info.Song;
+            changed = true;
+        }
+        if(string.IsNullOrEmpty(Artist) && info.Artist.Length > 0) {
+            Artist = info.Artist;
+            changed = true;
+        }
+        if(string.IsNullOrEmpty(Creator) && info.Creator.Length > 0) {
+            Creator = info.Creator;
+            changed = true;
+        }
+        return changed;
+    }
+    public bool ApplyLevel(TufLevel? level) {
+        if(level == null || level.Id != Id) return false;
+        bool changed = false;
+        changed |= Replace(ref Song, level.Song);
+        changed |= Replace(ref Artist, level.Artist);
+        changed |= Replace(ref Creator, level.Creator);
+        changed |= Replace(ref Difficulty, level.Difficulty);
+        changed |= Replace(ref DifficultyColor, level.DifficultyColor);
+        changed |= Replace(ref VideoLink, level.VideoLink);
+        changed |= Replace(ref DownloadUrl, level.DownloadUri?.ToString() ?? "");
+        if(Clears != level.Clears) {
+            Clears = level.Clears;
+            changed = true;
+        }
+        if(Likes != level.Likes) {
+            Likes = level.Likes;
+            changed = true;
+        }
+        return changed;
+    }
+    private static bool Replace(ref string field, string value) {
+        if(string.IsNullOrEmpty(value) || string.Equals(field, value, StringComparison.Ordinal)) return false;
+        field = value;
+        return true;
+    }
+    public JObject Serialize() => new() {
+        [nameof(Id)] = Id,
+        [nameof(Song)] = Song,
+        [nameof(Artist)] = Artist,
+        [nameof(Creator)] = Creator,
+        [nameof(Difficulty)] = Difficulty,
+        [nameof(DifficultyColor)] = DifficultyColor,
+        [nameof(Clears)] = Clears,
+        [nameof(Likes)] = Likes,
+        [nameof(Folder)] = Folder,
+        [nameof(DownloadUrl)] = DownloadUrl,
+        [nameof(VideoLink)] = VideoLink,
+        [nameof(FileId)] = FileId,
+        [nameof(SizeBytes)] = SizeBytes,
+        [nameof(InstalledAtUtc)] = InstalledAtUtc
+    };
+    public static TufInstallEntry? Deserialize(JToken token) {
+        try {
+            int id = token[nameof(Id)]?.Value<int>() ?? 0;
+            if(id <= 0) return null;
+            string folder = token[nameof(Folder)]?.Value<string>() ?? "";
+            if(string.IsNullOrWhiteSpace(folder)) return null;
+            return new TufInstallEntry {
+                Id = id,
+                Song = TufInput.CapDisplay(token[nameof(Song)]?.Value<string>(), ""),
+                Artist = TufInput.CapDisplay(token[nameof(Artist)]?.Value<string>(), ""),
+                Creator = TufInput.CapDisplay(token[nameof(Creator)]?.Value<string>(), ""),
+                Difficulty = TufInput.CapDisplay(token[nameof(Difficulty)]?.Value<string>(), "", 24),
+                DifficultyColor = TufInput.NormalizeColor(token[nameof(DifficultyColor)]?.Value<string>()),
+                Clears = Math.Max(0, token[nameof(Clears)]?.Value<int>() ?? 0),
+                Likes = Math.Max(0, token[nameof(Likes)]?.Value<int>() ?? 0),
+                Folder = folder,
+                DownloadUrl = token[nameof(DownloadUrl)]?.Value<string>() ?? "",
+                VideoLink = TufInput.CapDisplay(token[nameof(VideoLink)]?.Value<string>(), "", 300),
+                FileId = TufInput.CapDisplay(token[nameof(FileId)]?.Value<string>(), "", 64),
+                SizeBytes = Math.Max(0, token[nameof(SizeBytes)]?.Value<long>() ?? 0),
+                InstalledAtUtc = token[nameof(InstalledAtUtc)]?.Value<long>() ?? 0
+            };
+        } catch(Exception e) { Diag.Ignore(e); return null; }
+    }
+    public TufLevel ToLevel() {
+        Uri? uri = Uri.TryCreate(DownloadUrl, UriKind.Absolute, out Uri? parsed)
+            && TufNetworkPolicy.IsAllowedDownloadUri(parsed) ? parsed : null;
+        return new TufLevel(Id, Song, Artist, Creator, Difficulty, DifficultyColor, Clears, Likes, uri) {
+            VideoLink = VideoLink,
+            FileId = FileId,
+            SizeBytes = SizeBytes
+        };
+    }
+}
+public sealed class TufInstallIndex : ISettingsFile {
+    private readonly List<TufInstallEntry> entries = [];
+    private readonly Dictionary<int, TufInstallEntry> byId = [];
+    public IReadOnlyList<TufInstallEntry> Entries => entries;
+    public int Count => entries.Count;
+    public TufInstallEntry? Find(int id) => byId.TryGetValue(id, out TufInstallEntry? entry) ? entry : null;
+    public void Record(TufLevel level, string folder, bool freshInstall = true) {
+        if(level == null || level.Id <= 0 || string.IsNullOrWhiteSpace(folder)) return;
+        TufInstallEntry? existing = Find(level.Id);
+        long installedAt = existing?.InstalledAtUtc ?? 0;
+        if(installedAt <= 0) installedAt = DateTime.UtcNow.Ticks;
+        string fileId = freshInstall ? TufUpdateCheck.RemoteFileId(level) : "";
+        if(fileId.Length == 0) fileId = existing?.FileId ?? "";
+        long size = freshInstall ? 0 : existing?.SizeBytes ?? 0;
+        if(existing != null) entries.Remove(existing);
+        TufInstallEntry recorded = new() {
+            Id = level.Id,
+            Song = level.Song,
+            Artist = level.Artist,
+            Creator = level.Creator,
+            Difficulty = level.Difficulty,
+            DifficultyColor = level.DifficultyColor,
+            Clears = level.Clears,
+            Likes = level.Likes,
+            Folder = Path.GetFullPath(folder),
+            DownloadUrl = level.DownloadUri?.ToString() ?? "",
+            VideoLink = level.VideoLink,
+            FileId = fileId,
+            SizeBytes = size,
+            InstalledAtUtc = installedAt
+        };
+        entries.Insert(0, recorded);
+        byId[level.Id] = recorded;
+        Sort();
+    }
+    public TufInstallEntry Adopt(int id, string folder, long installedAtUtc) {
+        TufInstallEntry entry = new() {
+            Id = id,
+            Song = "",
+            Artist = "",
+            Creator = "",
+            Difficulty = "",
+            Folder = Path.GetFullPath(folder),
+            InstalledAtUtc = installedAtUtc
+        };
+        entries.Add(entry);
+        byId[id] = entry;
+        return entry;
+    }
+    public void SortEntries() => Sort();
+    public bool Remove(int id) {
+        TufInstallEntry? entry = Find(id);
+        if(entry == null) return false;
+        entries.Remove(entry);
+        byId.Remove(id);
+        return true;
+    }
+    public void SetFolder(int id, string folder) {
+        TufInstallEntry? entry = Find(id);
+        if(entry != null && !string.IsNullOrWhiteSpace(folder)) entry.Folder = Path.GetFullPath(folder);
+    }
+    public bool PruneMissing() {
+        int removed = entries.RemoveAll(e => {
+            try { return !Directory.Exists(e.Folder); } catch(Exception error) { Diag.Ignore(error); return true; }
+        });
+        if(removed > 0) RebuildLookup();
+        return removed > 0;
+    }
+    private void RebuildLookup() {
+        byId.Clear();
+        foreach(TufInstallEntry entry in entries) byId[entry.Id] = entry;
+    }
+    private void Sort() => entries.Sort((a, b) => b.InstalledAtUtc.CompareTo(a.InstalledAtUtc));
+    public JToken Serialize() => new JObject {
+        ["Version"] = 1,
+        ["Entries"] = new JArray(entries.Select(e => e.Serialize()).Cast<object>().ToArray())
+    };
+    public void Deserialize(JToken token) {
+        entries.Clear();
+        byId.Clear();
+        if(token["Entries"] is not JArray array) return;
+        foreach(JToken item in array) {
+            TufInstallEntry? entry = TufInstallEntry.Deserialize(item);
+            if(entry != null && byId.TryAdd(entry.Id, entry)) entries.Add(entry);
+        }
+        Sort();
+    }
+}

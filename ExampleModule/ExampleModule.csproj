@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <Nullable>enable</Nullable>
+        <LangVersion>10</LangVersion>
+        <NoWarn>MSB3277</NoWarn>
+        <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+        <!-- Argon modules ship as .armodule (still a normal .NET assembly inside). -->
+        <TargetExt>.armodule</TargetExt>
+        <!-- Any game with MelonLoader + Argon installed. Managed = its <Game>_Data/Managed folder (macOS layout below). -->
+        <GAME_PATH Condition="'$(GAME_PATH)' == ''">/Volumes/iiiiiiiiiiiiiiiiiiii/SteamLibrary/steamapps/common/A Dance of Fire and Ice</GAME_PATH>
+        <Managed Condition="'$(Managed)' == ''">$(GAME_PATH)/ADanceOfFireAndIce.app/Contents/Resources/Data/Managed</Managed>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Reference Include="$(GAME_PATH)/UserData/Argon/Core/ArgonCore.dll" Private="false" />
+        <Reference Include="$(GAME_PATH)/MelonLoader/net35/MelonLoader.dll" Private="false" />
+        <Reference Include="$(GAME_PATH)/MelonLoader/net35/0Harmony.dll" Private="false" />
+        <Reference Include="$(Managed)/Unity.TextMeshPro.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.CoreModule.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.UI.dll" Private="false" />
+        <Reference Include="$(Managed)/UnityEngine.InputLegacyModule.dll" Private="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- The button icon, baked into the DLL. White on transparent PNG. -->
+        <EmbeddedResource Include="icon.png" />
+        <!-- Any other images: load with LoadImage("banner.png"). -->
+        <EmbeddedResource Include="Images/*.png" />
+        <!-- Translations: Lang/<code>.json, picked up by Argon automatically. -->
+        <EmbeddedResource Include="Lang/*.json" />
+    </ItemGroup>
+
+    <Target Name="CopyToArgonModules" AfterTargets="Build">
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GAME_PATH)/UserData/Argon/Modules" />
+    </Target>
+</Project>
